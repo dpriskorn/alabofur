@@ -1,0 +1,54 @@
+# nfpm configuration for building alabofur .deb and .rpm packages.
+#   nfpm package -f packaging/nfpm.yaml -p deb -t .
+#   nfpm package -f packaging/nfpm.yaml -p rpm -t .
+# See https://nfpm.goreleaser.com
+name: alabofur
+arch: all
+platform: linux
+version: "1.0.0"
+section: net
+priority: optional
+maintainer: Tuncay Bahadir <tuncaybahadir@protonmail.com>
+description: |
+  Simple bandwidth shaper with a ufw-like UX.
+  Caps per-interface upload/download speeds and ships a systemd service so
+  limits persist across reboot.
+vendor: Tuncay Bahadir
+homepage: https://github.com/tuncaybahadir/alabofur
+license: MIT
+
+# Runtime dependencies per packaging format.
+depends:
+  - iproute2
+  - kmod
+overrides:
+  rpm:
+    depends:
+      - iproute
+      - kmod
+
+contents:
+  - src: bin/alabofur
+    dst: /usr/bin/alabofur
+    file_info:
+      mode: 0755
+  - src: lib/alabofur/common
+    dst: /usr/lib/alabofur/common
+    file_info:
+      mode: 0644
+  - src: lib/alabofur/config
+    dst: /usr/lib/alabofur/config
+    file_info:
+      mode: 0644
+  - src: lib/alabofur/tc
+    dst: /usr/lib/alabofur/tc
+    file_info:
+      mode: 0644
+  - src: share/alabofur/alabofur.service
+    dst: /usr/share/alabofur/alabofur.service
+    file_info:
+      mode: 0644
+  - src: share/man/man1/alabofur.1
+    dst: /usr/share/man/man1/alabofur.1
+    file_info:
+      mode: 0644
