@@ -1,3 +1,9 @@
+alabofur (1.0.1) jammy; urgency=medium
+
+  * New upstream release.
+
+ -- Tuncay Bahadır <tuncaybahadir@protonmail.com>  Mon, 15 Jun 2026 09:00:00 +0000
+
 alabofur (1.0.0) jammy; urgency=medium
 
   * Initial release.
