@@ -1,0 +1,19 @@
+Source: alabofur
+Section: net
+Priority: optional
+Maintainer: Tuncay Bahadır <tuncaybahadir@protonmail.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.2
+Homepage: https://github.com/tuncaybahadir/alabofur
+Rules-Requires-Root: no
+
+Package: alabofur
+Architecture: all
+Depends: ${misc:Depends}, iproute2, kmod
+Description: simple bandwidth shaper with a ufw-like UX
+ alabofur caps per-interface upload/download speeds using Linux traffic
+ control and ships a systemd service so the limits persist across reboot,
+ with a ufw-like command UX.
+ .
+ Limits are stored in /etc/alabofur as INI files and re-applied on boot by
+ the optional alabofur systemd service.

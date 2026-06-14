@@ -1,0 +1,13 @@
+#!/usr/bin/make -f
+# Build the alabofur Debian package via the project Makefile.
+# The Makefile honours PREFIX (default /usr) and DESTDIR, so dh_auto_install
+# stages everything under debian/alabofur with no extra configuration.
+
+%:
+	dh $@
+
+# Nothing to compile; the project is shell scripts installed by `make install`.
+override_dh_auto_build:
+
+# The `check` target needs shellcheck and is not a package test; skip it.
+override_dh_auto_test:
