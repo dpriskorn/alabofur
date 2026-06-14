@@ -23,8 +23,11 @@ depends:
   - kmod
 overrides:
   rpm:
+    # File-based capability so it resolves across rpm families: Fedora/RHEL ship
+    # tc in the `iproute` package, openSUSE in `iproute2`. `kmod` is named the
+    # same on both. This avoids a hard `iproute` dep that fails on openSUSE.
     depends:
-      - iproute
+      - /usr/sbin/tc
       - kmod
 
 contents:
