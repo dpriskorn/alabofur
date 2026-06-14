@@ -2,7 +2,7 @@ Source: alabofur
 Section: net
 Priority: optional
 Maintainer: Tuncay Bahadır <tuncaybahadir@protonmail.com>
-Build-Depends: debhelper-compat (= 13)
+Build-Depends: debhelper-compat (= 12)
 Standards-Version: 4.6.0
 Homepage: https://github.com/tuncaybahadir/alabofur
 Rules-Requires-Root: no
