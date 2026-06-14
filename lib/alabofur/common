@@ -1,0 +1,44 @@
+# shellcheck shell=sh
+# alabofur - shared low-level helpers
+#
+# Copyright (c) 2026 Tuncay Bahadır <tuncaybahadir@protonmail.com>
+# License: MIT
+#
+# Sourced by the alabofur CLI and library modules. Provides logging,
+# binary checks, root enforcement and command runners.
+
+# Print a message to stderr.
+err() { printf '%s\n' "$*" >&2; }
+
+# Print a message to stderr and exit non-zero.
+die() { err "$*"; exit 1; }
+
+# Test whether a command exists in PATH.
+have() { command -v "$1" >/dev/null 2>&1; }
+
+# Abort unless the named binary is available.
+ensure_binary() {
+    have "$1" || die "Required binary not found: $1"
+}
+
+# Abort unless running as root.
+require_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        die "This command must be run as root."
+    fi
+}
+
+# Run a command; abort with its stderr on failure. Used for steps that must
+# succeed.
+run() {
+    _ala_errfile="${TMPDIR:-/tmp}/.alabofur.$$"
+    if ! "$@" 2>"$_ala_errfile"; then
+        _ala_msg=$(cat "$_ala_errfile" 2>/dev/null)
+        rm -f "$_ala_errfile"
+        die "$* failed: ${_ala_msg:-error}"
+    fi
+    rm -f "$_ala_errfile"
+}
+
+# Run a command, silently ignoring any failure.
+runq() { "$@" >/dev/null 2>&1 || true; }

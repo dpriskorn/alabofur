@@ -1,0 +1,107 @@
+# shellcheck shell=sh
+# alabofur - Linux bandwidth shaping backend
+#
+# Copyright (c) 2026 Tuncay Bahadır <tuncaybahadir@protonmail.com>
+# License: MIT
+#
+# Builds HTB shaping on egress and mirrors ingress through an ifb device so
+# both upload and download can be capped. Requires the common module first.
+
+# install_dependencies
+#
+# Ensure tc/ip/modprobe exist, installing iproute2/iproute + kmod via the
+# system package manager when missing (requires root).
+install_dependencies() {
+    _missing=
+    for _b in tc ip modprobe; do
+        have "$_b" || _missing="$_missing $_b"
+    done
+    [ -n "$_missing" ] || return 0
+
+    if have apt; then
+        apt update >/dev/null 2>&1 || true
+        run apt install -y iproute2 kmod
+    elif have apt-get; then
+        apt-get update >/dev/null 2>&1 || true
+        run apt-get install -y iproute2 kmod
+    elif have dnf; then
+        run dnf install -y iproute kmod
+    elif have yum; then
+        run yum install -y iproute kmod
+    elif have zypper; then
+        run zypper --non-interactive install iproute2 kmod
+    elif have pacman; then
+        run pacman --noconfirm -S iproute2 kmod
+    else
+        die "Package manager not found; install iproute2/iproute and kmod manually."
+    fi
+}
+
+# tc_clear IFACE
+#
+# Remove any shaping qdiscs and the paired ifb device. Best-effort: every
+# step ignores failure so a clean interface does not error.
+tc_clear() {
+    _iface=$1
+    require_root
+    ensure_binary tc
+    ensure_binary ip
+
+    _ifb="ifb-$_iface"
+    runq tc qdisc del dev "$_iface" root
+    runq tc qdisc del dev "$_iface" ingress
+    runq tc qdisc del dev "$_ifb" root
+    runq ip link set dev "$_ifb" down
+    runq ip link del "$_ifb" type ifb
+}
+
+# tc_setup IFACE DOWNLOAD_MBIT UPLOAD_MBIT IPV6
+#
+# Apply HTB upload shaping on the interface and download shaping via a
+# dedicated ifb device. IPV6 ("true"/"false") toggles the IPv6 ingress filter.
+tc_setup() {
+    _iface=$1; _dl_mbit=$2; _ul_mbit=$3; _ipv6=$4
+    require_root
+    ensure_binary tc
+    ensure_binary ip
+    ensure_binary modprobe
+
+    _ifb="ifb-$_iface"
+    tc_clear "$_iface"
+
+    run modprobe ifb
+    run ip link add "$_ifb" type ifb
+    run ip link set "$_ifb" up
+
+    _up="$((_ul_mbit * 1000))kbit"
+    _down="$((_dl_mbit * 1000))kbit"
+
+    # Egress (upload)
+    run tc qdisc add dev "$_iface" root handle "1:" htb default 30
+    run tc class add dev "$_iface" parent "1:" classid "1:1" htb rate "$_up" ceil "$_up"
+    run tc class add dev "$_iface" parent "1:1" classid "1:30" htb rate "$_up" ceil "$_up"
+    run tc qdisc add dev "$_iface" parent "1:30" handle "30:" sfq perturb 10
+
+    # Ingress (download) redirected through the ifb device
+    run tc qdisc add dev "$_iface" handle "ffff:" ingress
+    run tc filter add dev "$_iface" parent "ffff:" protocol ip prio 50 \
+        u32 match u32 0 0 flowid "1:1" action mirred egress redirect dev "$_ifb"
+    if [ "$_ipv6" = "true" ]; then
+        run tc filter add dev "$_iface" parent "ffff:" protocol ipv6 prio 55 \
+            u32 match u32 0 0 flowid "1:1" action mirred egress redirect dev "$_ifb"
+    fi
+
+    run tc qdisc add dev "$_ifb" root handle "2:" htb default 20
+    run tc class add dev "$_ifb" parent "2:" classid "2:1" htb rate "$_down" ceil "$_down"
+    run tc class add dev "$_ifb" parent "2:1" classid "2:20" htb rate "$_down" ceil "$_down"
+    run tc qdisc add dev "$_ifb" parent "2:20" handle "20:" sfq perturb 10
+}
+
+# tc_show IFACE
+#
+# Print the interface's qdisc statistics (stdout or stderr of `tc -s`).
+tc_show() {
+    _iface=$1
+    ensure_binary tc
+    tc -s qdisc show dev "$_iface" 2>&1 | sed -e 's/[[:space:]]*$//'
+}

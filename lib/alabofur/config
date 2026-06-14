@@ -1,0 +1,125 @@
+# shellcheck shell=sh
+# alabofur - configuration handling
+#
+# Copyright (c) 2026 Tuncay Bahadır <tuncaybahadir@protonmail.com>
+# License: MIT
+#
+# Config files use a simple INI format. Each section name is an interface;
+# required keys are download_mbit and upload_mbit, with an optional boolean
+# ipv6 (default true).
+#
+# Requires the common module to be sourced first (err/die).
+
+CONF_DIR="${ALABOFUR_CONF_DIR:-/etc/alabofur}"
+DEFAULT_CONF_FILE="$CONF_DIR/alabofur.conf"
+
+# parse_ini FILE...
+#
+# Parse one or more INI files in argument order, merging later files over
+# earlier ones. Emits one tab-separated record per interface:
+#     <iface>\t<download_mbit>\t<upload_mbit>\t<ipv6:true|false>
+# Validates that download_mbit/upload_mbit are present integers; on any
+# validation error it writes a message to stderr and returns non-zero.
+parse_ini() {
+    awk '
+        function trim(s) { gsub(/^[ \t\r]+|[ \t\r]+$/, "", s); return s }
+        function norm_bool(v) {
+            v = tolower(trim(v))
+            if (v == "0" || v == "false" || v == "no" || v == "off") return "false"
+            return "true"
+        }
+        { line = $0; sub(/\r$/, "", line) }
+        line ~ /^[ \t]*[#;]/ { next }
+        line ~ /^[ \t]*$/    { next }
+        line ~ /^[ \t]*\[/ {
+            s = line
+            sub(/^[ \t]*\[/, "", s)
+            sub(/\].*$/, "", s)
+            cur = trim(s)
+            if (!(cur in seen)) { order[++n] = cur; seen[cur] = 1 }
+            file[cur] = FILENAME
+            next
+        }
+        line ~ /=/ {
+            if (cur == "") next
+            key = line; val = line
+            sub(/=.*$/, "", key)
+            sub(/^[^=]*=/, "", val)
+            key = trim(key); val = trim(val)
+            if (key == "download_mbit")    dl[cur] = val
+            else if (key == "upload_mbit") ul[cur] = val
+            else if (key == "ipv6")        v6[cur] = val
+        }
+        END {
+            rc = 0
+            for (i = 1; i <= n; i++) {
+                s = order[i]
+                if (dl[s] == "" || ul[s] == "") {
+                    printf("%s: section [%s] must define download_mbit and upload_mbit\n", file[s], s) > "/dev/stderr"
+                    rc = 1; continue
+                }
+                if (dl[s] !~ /^[0-9]+$/ || ul[s] !~ /^[0-9]+$/) {
+                    printf("%s: section [%s] download_mbit/upload_mbit must be integers\n", file[s], s) > "/dev/stderr"
+                    rc = 1; continue
+                }
+                b = (s in v6) ? norm_bool(v6[s]) : "true"
+                printf("%s\t%s\t%s\t%s\n", s, dl[s], ul[s], b)
+            }
+            if (rc) exit 3
+        }
+    ' "$@"
+}
+
+# load_all_configs
+#
+# Load the default config file plus any *.conf under CONF_DIR (default first,
+# then the rest in sorted order). Prints merged records (see parse_ini).
+# Returns non-zero if no config files exist.
+load_all_configs() {
+    set --
+    [ -f "$DEFAULT_CONF_FILE" ] && set -- "$@" "$DEFAULT_CONF_FILE"
+    if [ -d "$CONF_DIR" ]; then
+        for _f in "$CONF_DIR"/*.conf; do
+            [ -e "$_f" ] || continue
+            [ "$_f" = "$DEFAULT_CONF_FILE" ] && continue
+            set -- "$@" "$_f"
+        done
+    fi
+    if [ "$#" -eq 0 ]; then
+        err "No config files found in $CONF_DIR"
+        return 1
+    fi
+    parse_ini "$@"
+}
+
+# save_interface_config IFACE DOWNLOAD UPLOAD IPV6
+#
+# Write a per-interface config file at CONF_DIR/<iface>.conf and print its path.
+save_interface_config() {
+    _iface=$1; _dl=$2; _ul=$3; _ipv6=$4
+    mkdir -p "$CONF_DIR"
+    _path="$CONF_DIR/$_iface.conf"
+    {
+        printf '[%s]\n' "$_iface"
+        printf 'download_mbit = %s\n' "$_dl"
+        printf 'upload_mbit = %s\n' "$_ul"
+        printf 'ipv6 = %s\n' "$_ipv6"
+    } > "$_path"
+    printf '%s\n' "$_path"
+}
+
+# configtest
+#
+# Validate every *.conf in CONF_DIR. Returns non-zero on any parse error.
+# An empty config set is not an error.
+configtest() {
+    set --
+    if [ -d "$CONF_DIR" ]; then
+        for _f in "$CONF_DIR"/*.conf; do
+            [ -e "$_f" ] || continue
+            set -- "$@" "$_f"
+        done
+    fi
+    [ "$#" -gt 0 ] || return 0
+    parse_ini "$@" >/dev/null
+}
