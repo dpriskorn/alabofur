@@ -1,0 +1,10 @@
+# Shell scripts and packaging files must use LF, even when edited on Windows,
+# otherwise they break when run on Linux / built into packages.
+*.sh        text eol=lf
+bin/alabofur text eol=lf
+lib/alabofur/* text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+Makefile    text eol=lf
+*.service   text eol=lf
+*.1         text eol=lf
