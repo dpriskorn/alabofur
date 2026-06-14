@@ -43,6 +43,19 @@ sudo rpm --import https://tuncaybahadir.github.io/alabofur/alabofur.asc
 sudo dnf install alabofur
 ```
 
+### Arch / Manjaro
+
+Build a pacman-managed package from the bundled `PKGBUILD` (no AUR needed):
+
+```bash
+git clone https://github.com/tuncaybahadir/alabofur.git
+cd alabofur/packaging/aur
+makepkg -si
+```
+
+`pacman -R alabofur` removes it cleanly. You can also install from source on any
+distribution (see below).
+
 ### Direct download
 
 Grab the `.deb` / `.rpm` from
