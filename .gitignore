@@ -1,0 +1,19 @@
+# IDE
+.idea/
+*.iml
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# build artifacts
+dist/
+site/
+*.deb
+*.rpm
+*.snap
+*.tar.gz
+
+# snapcraft
+/parts/
+/stage/
+/prime/
