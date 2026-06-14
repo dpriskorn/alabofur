@@ -1,7 +1,7 @@
 name: alabofur
 title: alabofur
 base: core24
-version: '1.0.0'
+version: '1.0.1'
 summary: Simple bandwidth shaper with a ufw-like UX
 description: |
   alabofur caps per-interface upload/download speeds and ships a systemd

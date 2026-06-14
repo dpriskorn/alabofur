@@ -94,7 +94,7 @@ re-applies every configured interface. `remove-service` disables and removes it.
 subcommands just like `ufw`:
 
 ```
-alabofur 1.0.0 - simple bandwidth shaper (ufw-like UX)
+alabofur 1.0.1 - simple bandwidth shaper (ufw-like UX)
 
 Usage: alabofur <command> [args]
 
