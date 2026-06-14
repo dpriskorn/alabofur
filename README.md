@@ -24,6 +24,17 @@ echo "deb [signed-by=/usr/share/keyrings/alabofur.gpg] https://tuncaybahadir.git
 sudo apt update && sudo apt install alabofur
 ```
 
+### Ubuntu (PPA)
+
+Ubuntu users can alternatively install from the Launchpad PPA (built for Ubuntu
+20.04, 22.04 and 24.04):
+
+```bash
+sudo add-apt-repository ppa:tuncaybahadirr/alabofur
+sudo apt update
+sudo apt install alabofur
+```
+
 ### Fedora / RHEL / CentOS (dnf/yum)
 
 ```bash
