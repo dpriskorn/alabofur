@@ -189,6 +189,12 @@ Disable IPv6 ingress filters for an interface:
 $ sudo alabofur add eth0 50 10 --ipv4-only
 ```
 
+## Support
+
+If you find alabofur useful, you can support its development:
+
+<a href="https://www.buymeacoffee.com/tuncaybahadir"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="40"></a>
+
 ## Maintainer
 
 Tuncay Bahadır — <tuncaybahadir@protonmail.com>
