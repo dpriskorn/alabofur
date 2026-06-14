@@ -1,0 +1,290 @@
+#!/bin/sh
+# alabofur - simple bandwidth shaper with ufw-like UX
+#
+# Copyright (c) 2026 Tuncay Bahadır <tuncaybahadir@protonmail.com>
+# License: MIT
+
+set -u
+
+PROG="alabofur"
+VERSION="1.0.0"
+SERVICE_INSTALL_PATH="/etc/systemd/system/alabofur.service"
+
+# ---------------------------------------------------------------------------
+# Locate library + data dirs. Works both from a source checkout (bin/, lib/,
+# share/ siblings) and once installed (/usr/bin, /usr/lib, /usr/share), since
+# <bindir>/../lib resolves to /usr/lib for an installed /usr/bin/alabofur.
+# Overridable via ALABOFUR_LIBDIR / ALABOFUR_SHAREDIR for packaging tests.
+# ---------------------------------------------------------------------------
+_self=$(readlink -f "$0" 2>/dev/null || echo "$0")
+_selfdir=$(dirname "$_self")
+
+: "${ALABOFUR_LIBDIR:=}"
+if [ -z "$ALABOFUR_LIBDIR" ]; then
+    if [ -f "$_selfdir/../lib/alabofur/tc" ]; then
+        ALABOFUR_LIBDIR="$_selfdir/../lib/alabofur"
+    else
+        ALABOFUR_LIBDIR="/usr/lib/alabofur"
+    fi
+fi
+
+: "${ALABOFUR_SHAREDIR:=}"
+if [ -z "$ALABOFUR_SHAREDIR" ]; then
+    if [ -f "$_selfdir/../share/alabofur/alabofur.service" ]; then
+        ALABOFUR_SHAREDIR="$_selfdir/../share/alabofur"
+    else
+        ALABOFUR_SHAREDIR="/usr/share/alabofur"
+    fi
+fi
+
+# shellcheck source=lib/alabofur/common
+. "$ALABOFUR_LIBDIR/common"
+# shellcheck source=lib/alabofur/config
+. "$ALABOFUR_LIBDIR/config"
+# shellcheck source=lib/alabofur/tc
+. "$ALABOFUR_LIBDIR/tc"
+
+TAB=$(printf '\t')
+
+# ---------------------------------------------------------------------------
+# config-driven apply
+# ---------------------------------------------------------------------------
+
+# apply_interfaces [IFACE...]
+# Apply shaping for the given interfaces, or all configured ones when none
+# are given. Errors if a requested interface is not in the config.
+apply_interfaces() {
+    _configs=$(load_all_configs) || return 1
+
+    if [ "$#" -gt 0 ]; then
+        _missing=
+        for _iface in "$@"; do
+            if ! printf '%s\n' "$_configs" | awk -F "$TAB" -v w="$_iface" '$1==w{f=1} END{exit(f?0:1)}'; then
+                _missing="$_missing $_iface"
+            fi
+        done
+        if [ -n "$_missing" ]; then
+            err "Interfaces not in config:$_missing"
+            return 1
+        fi
+    fi
+
+    _rc=0
+    printf '%s\n' "$_configs" | {
+        while IFS="$TAB" read -r iface dl ul ipv6; do
+            [ -n "$iface" ] || continue
+            if [ "$#" -gt 0 ]; then
+                _match=0
+                for _want in "$@"; do
+                    [ "$_want" = "$iface" ] && _match=1
+                done
+                [ "$_match" -eq 1 ] || continue
+            fi
+            tc_setup "$iface" "$dl" "$ul" "$ipv6"
+            printf 'applied %s: down=%smbit up=%smbit\n' "$iface" "$dl" "$ul"
+        done
+    } || _rc=$?
+    return $_rc
+}
+
+# ---------------------------------------------------------------------------
+# systemd service
+# ---------------------------------------------------------------------------
+
+install_service() {
+    _force=$1
+    _template="$ALABOFUR_SHAREDIR/alabofur.service"
+    [ -f "$_template" ] || die "service template not found: $_template"
+
+    if [ -e "$SERVICE_INSTALL_PATH" ] && [ "$_force" != "1" ]; then
+        die "$SERVICE_INSTALL_PATH already exists (use --force to overwrite)"
+    fi
+
+    _bin=$(command -v alabofur 2>/dev/null || echo "$_self")
+    sed "s#@ALABOFUR_BIN@#$_bin#g" "$_template" > "$SERVICE_INSTALL_PATH"
+    runq systemctl daemon-reload
+    runq systemctl enable alabofur.service
+}
+
+systemctl_action() {
+    _action=$1
+    if ! have systemctl; then
+        err "systemctl not found; systemd is required for service management."
+        return 1
+    fi
+    systemctl "$_action" alabofur.service
+}
+
+# ---------------------------------------------------------------------------
+# commands
+# ---------------------------------------------------------------------------
+
+cmd_list() {
+    _configs=$(load_all_configs 2>/dev/null) || _configs=""
+
+    if [ "$#" -eq 0 ]; then
+        set --
+        if [ -n "$_configs" ]; then
+            for _i in $(printf '%s\n' "$_configs" | awk -F "$TAB" '{print $1}'); do
+                set -- "$@" "$_i"
+            done
+        fi
+    fi
+
+    if [ "$#" -eq 0 ]; then
+        err "No interfaces configured; use \`alabofur add <iface> <down> <up>\`."
+        return 1
+    fi
+
+    for _iface in "$@"; do
+        _rec=$(printf '%s\n' "$_configs" | awk -F "$TAB" -v w="$_iface" '$1==w{print; exit}')
+        if [ -n "$_rec" ]; then
+            _dl=$(printf '%s' "$_rec" | cut -f2)
+            _ul=$(printf '%s' "$_rec" | cut -f3)
+            _v6=$(printf '%s' "$_rec" | cut -f4)
+            printf '[%s] configured: down=%smbit up=%smbit ipv6=%s\n' "$_iface" "$_dl" "$_ul" "$_v6"
+        else
+            printf '[%s] not in config; showing tc state\n' "$_iface"
+        fi
+        tc_show "$_iface" || err "$_iface: error reading tc state"
+    done
+}
+
+cmd_apply() {
+    require_root
+    install_dependencies || return 1
+    apply_interfaces "$@"
+}
+
+cmd_add() {
+    require_root
+    _iface=""; _dl=""; _ul=""; _ipv6="true"
+    for _a in "$@"; do
+        case "$_a" in
+            --ipv4-only) _ipv6="false" ;;
+            *)
+                if   [ -z "$_iface" ]; then _iface="$_a"
+                elif [ -z "$_dl" ];    then _dl="$_a"
+                elif [ -z "$_ul" ];    then _ul="$_a"
+                fi
+                ;;
+        esac
+    done
+    [ -n "$_iface" ] && [ -n "$_dl" ] && [ -n "$_ul" ] || \
+        die "usage: $PROG add <interface> <download_mbit> <upload_mbit> [--ipv4-only]"
+    case "$_dl$_ul" in *[!0-9]*) die "download and upload must be integers (mbit)";; esac
+
+    install_dependencies || return 1
+    save_interface_config "$_iface" "$_dl" "$_ul" "$_ipv6" >/dev/null
+    printf 'saved config %s at %s\n' "$_iface" "$CONF_DIR"
+    apply_interfaces "$_iface"
+}
+
+cmd_deny() {
+    require_root
+    _iface=${1:-}
+    [ -n "$_iface" ] || die "usage: $PROG deny <interface>"
+    install_dependencies || return 1
+    save_interface_config "$_iface" 1 1 true >/dev/null
+    printf 'set %s to minimal bandwidth (deny)\n' "$_iface"
+    apply_interfaces "$_iface"
+}
+
+cmd_clear() {
+    require_root
+    _iface=${1:-}
+    [ -n "$_iface" ] || die "usage: $PROG clear <interface>"
+    install_dependencies || return 1
+    tc_clear "$_iface"
+    printf 'cleared shaping for %s\n' "$_iface"
+}
+
+cmd_configtest() {
+    if configtest; then
+        printf 'config OK\n'
+        return 0
+    fi
+    return 1
+}
+
+cmd_install_service() {
+    _force=0
+    for _a in "$@"; do
+        [ "$_a" = "--force" ] && _force=1
+    done
+    require_root
+    install_dependencies || return 1
+    install_service "$_force"
+    printf 'installed %s\n' "$SERVICE_INSTALL_PATH"
+}
+
+cmd_remove_service() {
+    require_root
+    if [ -e "$SERVICE_INSTALL_PATH" ]; then
+        runq systemctl disable alabofur.service
+        rm -f "$SERVICE_INSTALL_PATH"
+        runq systemctl daemon-reload
+        printf 'service removed\n'
+    else
+        printf 'service not installed\n'
+    fi
+}
+
+cmd_service_run() {
+    # entry point invoked by the systemd unit
+    configtest || return 1
+    apply_interfaces "$@"
+}
+
+usage() {
+    cat <<EOF
+$PROG $VERSION - simple bandwidth shaper (ufw-like UX)
+
+Usage: $PROG <command> [args]
+
+Commands:
+  list [iface...]                 show current tc state for configured interfaces
+  apply [iface...]                apply limits from config (default: all)
+  add <iface> <down> <up> [--ipv4-only]
+                                  add/update interface limits (mbit) and apply
+  deny <iface>                    set interface to near-zero bandwidth (1/1 mbit)
+  clear <iface>                   remove shaping rules for interface
+  configtest                      validate configuration files
+  install-service [--force]       install systemd service
+  remove-service                  remove systemd service
+  start|stop|restart|status       manage the systemd service
+  --version                       print version
+  -h, --help                      show this help
+
+Config: $DEFAULT_CONF_FILE plus $CONF_DIR/*.conf
+EOF
+}
+
+# ---------------------------------------------------------------------------
+# dispatch
+# ---------------------------------------------------------------------------
+
+main() {
+    [ "$#" -ge 1 ] || { usage >&2; exit 2; }
+    _cmd=$1; shift
+    case "$_cmd" in
+        list)            cmd_list "$@" ;;
+        apply)           cmd_apply "$@" ;;
+        add)             cmd_add "$@" ;;
+        deny)            cmd_deny "$@" ;;
+        clear)           cmd_clear "$@" ;;
+        configtest)      cmd_configtest "$@" ;;
+        install-service) cmd_install_service "$@" ;;
+        remove-service)  cmd_remove_service "$@" ;;
+        start)           require_root; systemctl_action start ;;
+        stop)            require_root; systemctl_action stop ;;
+        restart)         require_root; systemctl_action restart ;;
+        status)          require_root; systemctl_action status ;;
+        service-run)     cmd_service_run "$@" ;;
+        --version|-V|version) printf '%s %s\n' "$PROG" "$VERSION" ;;
+        -h|--help|help)  usage ;;
+        *)               err "unknown command: $_cmd"; usage >&2; exit 2 ;;
+    esac
+}
+
+main "$@"
