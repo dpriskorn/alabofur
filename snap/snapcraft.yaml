@@ -8,6 +8,10 @@ description: |
   service so the limits persist across reboot, with a ufw-like command UX.
 license: MIT
 grade: stable
+contact: tuncaybahadir@protonmail.com
+website: https://tuncaybahadir.github.io/alabofur
+source-code: https://github.com/tuncaybahadir/alabofur
+issues: https://github.com/tuncaybahadir/alabofur/issues
 
 # The tool runs tc/ip, loads the ifb kernel module and writes a systemd unit,
 # so it needs full system access -> classic confinement (manual store review).
