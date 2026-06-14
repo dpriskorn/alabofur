@@ -7,12 +7,12 @@ missing. Language: English.
 
 ## Supported distributions
 
-- Ubuntu 20.04+ (deb, uses `iproute2`, `kmod`)
+- Ubuntu 20.04+ (deb)
 - Debian 8+ (deb)
-- Fedora 36+ (rpm, `iproute`/`kmod`)
+- Fedora 36+ (rpm)
 - RHEL/CentOS/Alma/Rocky 8+ (rpm)
-- openSUSE Leap/Tumbleweed (rpm, `iproute2`, `kmod`)
-- Arch/Manjaro (pacman, `iproute2`, `kmod`)
+- openSUSE Leap/Tumbleweed (rpm)
+- Arch/Manjaro (pacman)
 
 ## Installation
 
