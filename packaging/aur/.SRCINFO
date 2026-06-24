@@ -1,0 +1,13 @@
+pkgbase = alabofur
+	pkgdesc = Simple bandwidth shaper with a ufw-like UX
+	pkgver = 1.0.1
+	pkgrel = 1
+	url = https://github.com/tuncaybahadir/alabofur
+	arch = any
+	license = MIT
+	depends = iproute2
+	depends = kmod
+	source = alabofur-1.0.1.tar.gz::https://github.com/tuncaybahadir/alabofur/archive/refs/tags/v1.0.1.tar.gz
+	sha256sums = c42599a4e0f187f9b183863334568624d9a8a0c36d4c16781efac7309a6c6c88
+
+pkgname = alabofur
